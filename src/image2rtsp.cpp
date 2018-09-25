@@ -16,8 +16,9 @@ using namespace image2rtsp;
 
 
 void Image2RTSPNodelet::onInit() {
-	string mountpoint_1;
-	string pipeline_1;
+	string pipeline_cam = "( appsrc name=imagesrc do-timestamp=true max-latency=50 max-bytes=1000 is-live=true ! videoconvert ! videoscale ! video/x-raw,width=800,height=640 ! videoconvert ! videorate ! video/x-raw,framerate=10/1 ! queue ! x264enc tune=zerolatency bitrate=1000 key-int-max=90 ! video/x-h264, profile=baseline ! rtph264pay name=pay0 pt=96 )";
+
+	string pipeline_appsrc = "( appsrc name=imagesrc do-timestamp=true max-latency=50 max-bytes=1000 is-live=true ! videoconvert ! videoscale ! video/x-raw,width=800,height=640 ! videoconvert ! videorate ! video/x-raw,framerate=10/1 ! queue ! x264enc tune=zerolatency bitrate=1000 key-int-max=90 ! video/x-h264, profile=baseline ! rtph264pay name=pay0 pt=96 )";
 
 	NODELET_DEBUG("Initializing image2rtsp nodelet...");
 
@@ -28,15 +29,36 @@ void Image2RTSPNodelet::onInit() {
 
 	num = 0;
 	appsrc = NULL;
-	ros::NodeHandle& node = getPrivateNodeHandle();
+	ros::NodeHandle& nh = getPrivateNodeHandle();
 
 	video_mainloop_start();
 	rtsp_server = rtsp_server_create();
 
-	node.getParam("mountpoint_1", mountpoint_1);
-	node.getParam("pipeline_1", pipeline_1);
+	XmlRpc::XmlRpcValue streams;
+	nh.getParam("streams", streams);
+	ROS_ASSERT(streams.getType() == XmlRpc::XmlRpcValue::TypeStruct);
 
-	rtsp_server_add_url(mountpoint_1.c_str(), pipeline_1.c_str(), (GstElement **)&appsrc);
+	ROS_INFO("Number of streams: %d", streams.size());
+
+	for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = streams.begin(); it != streams.end(); ++it) 
+	{
+    	ROS_INFO_STREAM("Found stream: " << (std::string)(it->first) << " ==> " << streams[it->first]);
+
+		if (streams[it->first]["type"]=="cam")
+		{
+			ROS_INFO("ADDING CAMERA");
+			rtsp_server_add_url(static_cast<std::string>(streams[it->first]["mountpoint"]).c_str(), pipeline_cam.c_str(), NULL);
+		} 
+		else if (streams[it->first]["type"]=="topic")
+		{
+			ROS_INFO("ADDING topic");
+			rtsp_server_add_url(static_cast<std::string>(streams[it->first]["mountpoint"]).c_str(), pipeline_appsrc.c_str(), (GstElement **)&appsrc);
+		}
+
+	}
+
+
+	
 }
 
 /* Borrowed from https://github.com/ProjectArtemis/gst_video_server/blob/master/src/server_nodelet.cpp */
@@ -151,9 +173,9 @@ void Image2RTSPNodelet::url_connected(string url) {
 
 	if (url == "/front") {
 		if (num == 0) {
-			ros::NodeHandle& node = getPrivateNodeHandle();
-			node.getParam("topic_1", topic);
-			sub = node.subscribe(topic, 10, &Image2RTSPNodelet::imageCallback, this);
+			ros::NodeHandle& nh = getPrivateNodeHandle();
+			nh.getParam("topic_1", topic);
+			sub = nh.subscribe(topic, 10, &Image2RTSPNodelet::imageCallback, this);
 		}
 		num++;
 	}

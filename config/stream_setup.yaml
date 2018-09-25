@@ -1,0 +1,11 @@
+streams:
+  stream1:
+    name: stream1
+    type: cam
+    source: /dev/video0
+    mountpoint: /front
+  stream2:
+    name: stream2
+    type: topic
+    source: /usb_cam/image_raw
+    mountpoint: /back
