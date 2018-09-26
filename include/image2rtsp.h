@@ -14,7 +14,7 @@ namespace image2rtsp {
 		private:
 			ros::Subscriber sub;
 			GstAppSrc *appsrc;
-			int num;
+			std::map<std::string, int> num_of_clients;
 			GstCaps* gst_caps_new_from_image(const sensor_msgs::Image::ConstPtr &msg);
 			void imageCallback(const sensor_msgs::Image::ConstPtr& msg);
 			void video_mainloop_start();

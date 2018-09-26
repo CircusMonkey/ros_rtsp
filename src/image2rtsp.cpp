@@ -16,9 +16,8 @@ using namespace image2rtsp;
 
 
 void Image2RTSPNodelet::onInit() {
-	string pipeline_cam = "( appsrc name=imagesrc do-timestamp=true max-latency=50 max-bytes=1000 is-live=true ! videoconvert ! videoscale ! video/x-raw,width=800,height=640 ! videoconvert ! videorate ! video/x-raw,framerate=10/1 ! queue ! x264enc tune=zerolatency bitrate=1000 key-int-max=90 ! video/x-h264, profile=baseline ! rtph264pay name=pay0 pt=96 )";
-
-	string pipeline_appsrc = "( appsrc name=imagesrc do-timestamp=true max-latency=50 max-bytes=1000 is-live=true ! videoconvert ! videoscale ! video/x-raw,width=800,height=640 ! videoconvert ! videorate ! video/x-raw,framerate=10/1 ! queue ! x264enc tune=zerolatency bitrate=1000 key-int-max=90 ! video/x-h264, profile=baseline ! rtph264pay name=pay0 pt=96 )";
+	string pipeline, mountpoint, bitrate, caps;
+	string pipeline_tail =  " key-int-max=30 ! video/x-h264, profile=baseline ! rtph264pay name=pay0 pt=96 )"; // Gets completed based on rosparams below
 
 	NODELET_DEBUG("Initializing image2rtsp nodelet...");
 
@@ -27,41 +26,58 @@ void Image2RTSPNodelet::onInit() {
 		putenv((char*)"GST_DEBUG=*:2");
 	}
 
-	num = 0;
 	appsrc = NULL;
 	ros::NodeHandle& nh = getPrivateNodeHandle();
 
 	video_mainloop_start();
 	rtsp_server = rtsp_server_create();
 
+	// Get the parameters from the rosparam server
 	XmlRpc::XmlRpcValue streams;
 	nh.getParam("streams", streams);
 	ROS_ASSERT(streams.getType() == XmlRpc::XmlRpcValue::TypeStruct);
 
-	ROS_INFO("Number of streams: %d", streams.size());
+	ROS_INFO("Number of RTSP streams: %d", streams.size());
 
+	// Go through and parse each stream
 	for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = streams.begin(); it != streams.end(); ++it) 
 	{
-    	ROS_INFO_STREAM("Found stream: " << (std::string)(it->first) << " ==> " << streams[it->first]);
+		XmlRpc::XmlRpcValue stream = streams[it->first];
+    	ROS_INFO_STREAM("Found stream: " << (std::string)(it->first) << " ==> " << stream);
+		
+		// Convert to string for ease of use
+		mountpoint = static_cast<std::string>(stream["mountpoint"]);
+		bitrate = std::to_string(static_cast<int>(stream["bitrate"]));
+		caps = static_cast<std::string>(stream["caps"]);
 
-		if (streams[it->first]["type"]=="cam")
+		// uvc camera?
+		if (stream["type"]=="cam")
 		{
-			ROS_INFO("ADDING CAMERA");
-			rtsp_server_add_url(static_cast<std::string>(streams[it->first]["mountpoint"]).c_str(), pipeline_cam.c_str(), NULL);
-		} 
-		else if (streams[it->first]["type"]=="topic")
-		{
-			ROS_INFO("ADDING topic");
-			rtsp_server_add_url(static_cast<std::string>(streams[it->first]["mountpoint"]).c_str(), pipeline_appsrc.c_str(), (GstElement **)&appsrc);
+			pipeline = "( v4l2src device=" + static_cast<std::string>(stream["source"]) + " ! videoconvert ! videoscale ! " + caps + " ! x264enc tune=zerolatency bitrate=" + bitrate + pipeline_tail;
+
+			rtsp_server_add_url(mountpoint.c_str(), pipeline.c_str(), NULL);
 		}
+		// ROS Image topic?
+		else if (stream["type"]=="topic")
+		{
+			/* Keep record of number of clients connected to each topic.
+			* so we know to stop subscribing when no-one is connected. */
+			num_of_clients[mountpoint] = 0;
 
+			// Setup the full pipeline
+			pipeline = "( appsrc name=imagesrc do-timestamp=true min-latency=0 max-latency=0 max-bytes=1000 is-live=true ! videoconvert ! videoscale ! " + caps + " ! x264enc tune=zerolatency bitrate=" + bitrate + pipeline_tail;
+
+			// Add the pipeline to the rtsp server
+			rtsp_server_add_url(mountpoint.c_str(), pipeline.c_str(), (GstElement **)&appsrc);
+		}
+		else
+		{
+			ROS_ERROR("Undefined stream type. Check your stream_setup.yaml file.");
+		}
 	}
-
-
-	
 }
 
-/* Borrowed from https://github.com/ProjectArtemis/gst_video_server/blob/master/src/server_nodelet.cpp */
+/* Modified from https://github.com/ProjectArtemis/gst_video_server/blob/master/src/server_nodelet.cpp */
 GstCaps* Image2RTSPNodelet::gst_caps_new_from_image(const sensor_msgs::Image::ConstPtr &msg)
 {
 	// http://gstreamer.freedesktop.org/data/doc/gstreamer/head/pwg/html/section-types-definitions.html
@@ -97,16 +113,14 @@ GstCaps* Image2RTSPNodelet::gst_caps_new_from_image(const sensor_msgs::Image::Co
 			nullptr);
 }
 
+
 void Image2RTSPNodelet::imageCallback(const sensor_msgs::Image::ConstPtr& msg) {
 	GstBuffer *buf;
-	void *imgdata;
-	GstMapInfo map;
-	static GstClockTime timestamp=0;
 
 	GstCaps *caps;
 	char *gst_type, *gst_format=(char *)"";
 
-	g_print("Image encoding: %s\n", msg->encoding.c_str());
+	// g_print("Image encoding: %s\n", msg->encoding.c_str());
 
 	if (appsrc != NULL) {
 		// Set caps from message
@@ -117,78 +131,66 @@ void Image2RTSPNodelet::imageCallback(const sensor_msgs::Image::ConstPtr& msg) {
 		gst_buffer_fill(buf, 0, msg->data.data(), msg->data.size());
 		GST_BUFFER_FLAG_SET(buf, GST_BUFFER_FLAG_LIVE);
 
-		// gst_buffer_map(buf, &map, GST_MAP_READ);
-		// imgdata = map.data;
-
-		// GST_BUFFER_PTS(buf) = timestamp;
-		// GST_BUFFER_DURATION(buf) = gst_util_uint64_scale_int(1, GST_SECOND, 15);
-		// timestamp += GST_BUFFER_DURATION(buf);
-
-		// memcpy(imgdata, &msg->data[0], msg->step*msg->height);
-
-		// gst_buffer_unmap(buf, &map);
 		gst_app_src_push_buffer(appsrc, buf);
 	}
-
-
-	// /* Create the sample from the ros msg */
-	// GstFlowReturn ret;
-	// // unfortunately we may not move image data because it is immutable. copying.
-	// auto buffer = gst_buffer_new_allocate(nullptr, msg->data.size(), nullptr);
-	// g_assert(buffer);
-
-	// /* NOTE(vooon):
-	//  * I found that best is to use `do-timestamp=true` parameter
-	//  * and forgot about stamping stamp problem (PTS).
-	//  */
-	// //auto ts = gst_time_from_stamp(msg->header.stamp);
-	// //NODELET_INFO("TS: %lld, %lld", ts, gst_util_uint64_scale_int(1, GST_SECOND, 40));
-
-	// gst_buffer_fill(buffer, 0, msg->data.data(), msg->data.size());
-	// GST_BUFFER_FLAG_SET(buffer, GST_BUFFER_FLAG_LIVE);
-	// //GST_BUFFER_PTS(buffer) = ts;
-
-	// auto caps = gst_caps_new_from_image(msg);
-    // g_print("Got caps from msg\n");
-	// if (caps == nullptr) {
-	// 	gst_object_unref(GST_OBJECT(buffer));
-	// 	return;
-	// }
-
-	// auto sample = gst_sample_new(buffer, caps, nullptr, nullptr);
-    // g_print("Assigned a sample\n");
-	// gst_buffer_unref(buffer);
-	// gst_caps_unref(caps);
-
-	// /* Get the pipeline to push to */
-	// ret = gst_app_src_push_sample (GST_APP_SRC (appsrc), sample);
-	// gst_object_unref (sample);
 }
 
 
 void Image2RTSPNodelet::url_connected(string url) {
-	string topic;
+	std::string mountpoint, source;
 
 	NODELET_INFO("Client connected: %s", url.c_str());
+	ros::NodeHandle& nh = getPrivateNodeHandle();
 
-	if (url == "/front") {
-		if (num == 0) {
-			ros::NodeHandle& nh = getPrivateNodeHandle();
-			nh.getParam("topic_1", topic);
-			sub = nh.subscribe(topic, 10, &Image2RTSPNodelet::imageCallback, this);
+	// Get the parameters from the rosparam server
+	XmlRpc::XmlRpcValue streams;
+	nh.getParam("streams", streams);
+	ROS_ASSERT(streams.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+
+	// Go through and parse each stream
+	for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = streams.begin(); it != streams.end(); ++it) 
+	{
+		XmlRpc::XmlRpcValue stream = streams[it->first];
+		mountpoint = static_cast<std::string>(stream["mountpoint"]);
+		source = static_cast<std::string>(stream["source"]);
+
+		// Check which stream the client has connected to
+		if (url==mountpoint) {
+
+			if (num_of_clients[url]==0) {
+				// Subscribe to the ROS topic
+				sub = nh.subscribe(source, 10, &Image2RTSPNodelet::imageCallback, this);
+			}
+			num_of_clients[url]++;
 		}
-		num++;
 	}
 }
 
 void Image2RTSPNodelet::url_disconnected(string url) {
-	NODELET_INFO("Client disconnected: %s", url.c_str());
+	std::string mountpoint;
 
-	if (url == "/front") {
-		if (num > 0) num--;
-		if (num == 0) {
-			sub.shutdown();
-			appsrc = NULL;
+	NODELET_INFO("Client disconnected: %s", url.c_str());
+	ros::NodeHandle& nh = getPrivateNodeHandle();
+
+	// Get the parameters from the rosparam server
+	XmlRpc::XmlRpcValue streams;
+	nh.getParam("streams", streams);
+	ROS_ASSERT(streams.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+
+	// Go through and parse each stream
+	for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = streams.begin(); it != streams.end(); ++it) 
+	{
+		XmlRpc::XmlRpcValue stream = streams[it->first];
+		mountpoint = static_cast<std::string>(stream["mountpoint"]);
+
+		// Check which stream the client has disconnected from
+		if (url==mountpoint) {
+			if (num_of_clients[url] > 0) num_of_clients[url]--;
+			if (num_of_clients[url] == 0) {
+				// No-one else is connected. Stop the subscription.
+				sub.shutdown();
+				appsrc = NULL;
+			}
 		}
 	}
 }

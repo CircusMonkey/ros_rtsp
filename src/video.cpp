@@ -95,19 +95,50 @@ GstRTSPServer *Image2RTSPNodelet::rtsp_server_create() {
  * pipeline and configure our appsrc */
 static void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, GstElement **appsrc)
 {
-	GstElement *pipeline = gst_rtsp_media_get_element(media);
+	if (appsrc) {
+		GstElement *pipeline = gst_rtsp_media_get_element(media);
 
-	*appsrc = gst_bin_get_by_name(GST_BIN(pipeline), "imagesrc");
-	/* this instructs appsrc that we will be dealing with timed buffer */
-	gst_util_set_object_arg(G_OBJECT(*appsrc), "format", "time");
+		*appsrc = gst_bin_get_by_name(GST_BIN(pipeline), "imagesrc");
+		/* this instructs appsrc that we will be dealing with timed buffer */
+		gst_util_set_object_arg(G_OBJECT(*appsrc), "format", "time");
 
-	gst_object_unref(pipeline);
+		gst_object_unref(pipeline);
+	}
+	else
+	{
+		guint i, n_streams;
+		n_streams = gst_rtsp_media_n_streams (media);
+
+		for (i = 0; i < n_streams; i++) {
+			GstRTSPAddressPool *pool;
+			GstRTSPStream *stream;
+			gchar *min, *max;
+
+			stream = gst_rtsp_media_get_stream (media, i);
+
+			/* make a new address pool */
+			pool = gst_rtsp_address_pool_new ();
+
+			min = g_strdup_printf ("224.3.0.%d", (2 * i) + 1);
+			max = g_strdup_printf ("224.3.0.%d", (2 * i) + 2);
+			gst_rtsp_address_pool_add_range (pool, min, max,
+				5000 + (10 * i), 5010 + (10 * i), 1);
+			g_free (min);
+			g_free (max);
+
+			gst_rtsp_stream_set_address_pool (stream, pool);
+			g_object_unref (pool);
+  		}
+	}
 }
 
 
 void Image2RTSPNodelet::rtsp_server_add_url(const char *url, const char *sPipeline, GstElement **appsrc) {
 	GstRTSPMountPoints *mounts;
 	GstRTSPMediaFactory *factory;
+
+	ROS_INFO("%s", url);
+	ROS_INFO("%s", sPipeline);
 
 	/* get the mount points for this server, every server has a default object
 	* that be used to map uri mount points to media factories */
@@ -120,7 +151,7 @@ void Image2RTSPNodelet::rtsp_server_add_url(const char *url, const char *sPipeli
 	factory = gst_rtsp_media_factory_new();
 	gst_rtsp_media_factory_set_launch(factory, sPipeline);
 
-        /* notify when our media is ready, This is called whenever someone asks for
+	/* notify when our media is ready, This is called whenever someone asks for
 	 * the media and a new pipeline is created */
 	g_signal_connect(factory, "media-configure", (GCallback)media_configure, appsrc);
 
