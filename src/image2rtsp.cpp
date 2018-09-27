@@ -26,7 +26,6 @@ void Image2RTSPNodelet::onInit() {
 		putenv((char*)"GST_DEBUG=*:2");
 	}
 
-	appsrc = NULL;
 	ros::NodeHandle& nh = getPrivateNodeHandle();
 
 	video_mainloop_start();
@@ -48,12 +47,11 @@ void Image2RTSPNodelet::onInit() {
 		// Convert to string for ease of use
 		mountpoint = static_cast<std::string>(stream["mountpoint"]);
 		bitrate = std::to_string(static_cast<int>(stream["bitrate"]));
-		caps = static_cast<std::string>(stream["caps"]);
 
 		// uvc camera?
 		if (stream["type"]=="cam")
 		{
-			pipeline = "( v4l2src device=" + static_cast<std::string>(stream["source"]) + " ! videoconvert ! videoscale ! " + caps + " ! x264enc tune=zerolatency bitrate=" + bitrate + pipeline_tail;
+			pipeline = "( " + static_cast<std::string>(stream["source"]) + " ! x264enc tune=zerolatency bitrate=" + bitrate + pipeline_tail;
 
 			rtsp_server_add_url(mountpoint.c_str(), pipeline.c_str(), NULL);
 		}
@@ -63,12 +61,14 @@ void Image2RTSPNodelet::onInit() {
 			/* Keep record of number of clients connected to each topic.
 			* so we know to stop subscribing when no-one is connected. */
 			num_of_clients[mountpoint] = 0;
+			appsrc[mountpoint] = NULL;
+			caps = static_cast<std::string>(stream["caps"]);
 
 			// Setup the full pipeline
 			pipeline = "( appsrc name=imagesrc do-timestamp=true min-latency=0 max-latency=0 max-bytes=1000 is-live=true ! videoconvert ! videoscale ! " + caps + " ! x264enc tune=zerolatency bitrate=" + bitrate + pipeline_tail;
 
 			// Add the pipeline to the rtsp server
-			rtsp_server_add_url(mountpoint.c_str(), pipeline.c_str(), (GstElement **)&appsrc);
+			rtsp_server_add_url(mountpoint.c_str(), pipeline.c_str(), (GstElement **)&(appsrc[mountpoint]));
 		}
 		else
 		{
@@ -109,35 +109,33 @@ GstCaps* Image2RTSPNodelet::gst_caps_new_from_image(const sensor_msgs::Image::Co
 			"format", G_TYPE_STRING, format->second.c_str(),
 			"width", G_TYPE_INT, msg->width,
 			"height", G_TYPE_INT, msg->height,
-			"framerate", GST_TYPE_FRACTION, 10, 1,	// 0/1 = dynamic
+			"framerate", GST_TYPE_FRACTION, 10, 1,
 			nullptr);
 }
 
 
-void Image2RTSPNodelet::imageCallback(const sensor_msgs::Image::ConstPtr& msg) {
+void Image2RTSPNodelet::imageCallback(const sensor_msgs::Image::ConstPtr& msg, const std::string& topic) {
 	GstBuffer *buf;
 
 	GstCaps *caps;
 	char *gst_type, *gst_format=(char *)"";
-
 	// g_print("Image encoding: %s\n", msg->encoding.c_str());
-
-	if (appsrc != NULL) {
+	if (appsrc[topic] != NULL) {
 		// Set caps from message
 		caps = gst_caps_new_from_image(msg);
-		gst_app_src_set_caps(appsrc, caps);
+		gst_app_src_set_caps(appsrc[topic], caps);
 
 		buf = gst_buffer_new_allocate(nullptr, msg->data.size(), nullptr);
 		gst_buffer_fill(buf, 0, msg->data.data(), msg->data.size());
 		GST_BUFFER_FLAG_SET(buf, GST_BUFFER_FLAG_LIVE);
 
-		gst_app_src_push_buffer(appsrc, buf);
+		gst_app_src_push_buffer(appsrc[topic], buf);
 	}
 }
 
 
 void Image2RTSPNodelet::url_connected(string url) {
-	std::string mountpoint, source;
+	std::string mountpoint, source, type;
 
 	NODELET_INFO("Client connected: %s", url.c_str());
 	ros::NodeHandle& nh = getPrivateNodeHandle();
@@ -151,15 +149,16 @@ void Image2RTSPNodelet::url_connected(string url) {
 	for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = streams.begin(); it != streams.end(); ++it) 
 	{
 		XmlRpc::XmlRpcValue stream = streams[it->first];
+		type = static_cast<std::string>(stream["type"]);
 		mountpoint = static_cast<std::string>(stream["mountpoint"]);
 		source = static_cast<std::string>(stream["source"]);
 
 		// Check which stream the client has connected to
-		if (url==mountpoint) {
+		if (type=="topic" && url==mountpoint) {
 
 			if (num_of_clients[url]==0) {
 				// Subscribe to the ROS topic
-				sub = nh.subscribe(source, 10, &Image2RTSPNodelet::imageCallback, this);
+				subs[url] = nh.subscribe<sensor_msgs::Image>(source, 1, boost::bind(&Image2RTSPNodelet::imageCallback, this, _1, url));
 			}
 			num_of_clients[url]++;
 		}
@@ -188,8 +187,8 @@ void Image2RTSPNodelet::url_disconnected(string url) {
 			if (num_of_clients[url] > 0) num_of_clients[url]--;
 			if (num_of_clients[url] == 0) {
 				// No-one else is connected. Stop the subscription.
-				sub.shutdown();
-				appsrc = NULL;
+				subs[url].shutdown();
+				appsrc[url] = NULL;
 			}
 		}
 	}

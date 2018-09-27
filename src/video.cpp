@@ -94,11 +94,11 @@ GstRTSPServer *Image2RTSPNodelet::rtsp_server_create() {
 /* called when a new media pipeline is constructed. We can query the
  * pipeline and configure our appsrc */
 static void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, GstElement **appsrc)
-{
-	if (appsrc) {
+{	if (appsrc) {
 		GstElement *pipeline = gst_rtsp_media_get_element(media);
 
 		*appsrc = gst_bin_get_by_name(GST_BIN(pipeline), "imagesrc");
+
 		/* this instructs appsrc that we will be dealing with timed buffer */
 		gst_util_set_object_arg(G_OBJECT(*appsrc), "format", "time");
 
@@ -136,9 +136,6 @@ static void media_configure(GstRTSPMediaFactory *factory, GstRTSPMedia *media, G
 void Image2RTSPNodelet::rtsp_server_add_url(const char *url, const char *sPipeline, GstElement **appsrc) {
 	GstRTSPMountPoints *mounts;
 	GstRTSPMediaFactory *factory;
-
-	ROS_INFO("%s", url);
-	ROS_INFO("%s", sPipeline);
 
 	/* get the mount points for this server, every server has a default object
 	* that be used to map uri mount points to media factories */
