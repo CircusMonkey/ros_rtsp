@@ -1,34 +1,10 @@
 # Set up your streams to rtsp here.
-#
-# "type": ["cam" , "topic"] 
-# 
-# "source": 
-#     if type=cam, location of v4l2 camera
-#     if type=topic, the ROS Image topic to subscribe to. 
-#
-# Notes:
-#     Use a lower framerate of 10/1 on ROS topics. 
-#     There may be issues with appsrc 'media not prepared' errors if the framerate is too high.
+streams: # Cannot rename - must leave this as is.
 
-streams:
-
-  # stream-x:
-  #   type: cam
-  #   source: "v4l2src device=/dev/video0 ! videoconvert ! videoscale ! video/x-raw,framerate=15/1,width=1280,height=720"
-  #   mountpoint: /front
-  #   bitrate: 500
-
-  # stream1:
-  #   type: cam
-  #   source: "v4l2src device=/dev/video0 ! videoconvert ! videoscale ! video/x-raw,framerate=15/1,width=1280,height=720"
-  #   mountpoint: /back
-  #   bitrate: 500
-
-  stream-a:
-    type: topic
-    source: /usb_cam0/image_raw
+  stream-x:
+    type: cam
+    source: "v4l2src device=/dev/video0 ! videoconvert ! videoscale ! video/x-raw,framerate=15/1,width=1280,height=720"
     mountpoint: /front
-    caps: video/x-raw,framerate=10/1,width=640,height=480
     bitrate: 500
 
   stream-yay:
