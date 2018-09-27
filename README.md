@@ -38,6 +38,7 @@ streams: # Cannot rename - must leave this as is.
 Notes:
 - Add as many streams as you need. If too much latency is encounted with multiple streams running, the server computer may be maxing out its processor trying to encode all the streams. Try reducing the resolution of the source caps.
 - The ROS Image topic stream may be buggy with framerates too fast for the Image publisher and the buffer writing. Stick with 10/1 fps unless you want to debug? :)
+- If too many frames are being dropped, it is likely due to network bandwidth. Try dropping the bitrate.
 
 ## Checking the streams
 ### gstreamer
