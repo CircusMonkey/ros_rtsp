@@ -1,27 +1,22 @@
 # ros_rtsp
 ROS package to subscribe to an ROS Image topic (and as many other video sources as you want) and serve it up as a RTSP video feed with different mount points.
+Should provide a real-time video feed (or as close as possible).
 
-This is still very much a work in progress. Developing on a mix of Ubuntu 16.04 and 18.04.
+This is still very much a work in progress. Developing on Ubuntu 16.04 and 18.04 with ROS kinetic and melodic.
 
 
 ## Dependencies
 - ROS
 
 - gstreamer development libs:
-```
+```bash
 sudo apt-get install libgstreamer-plugins-base1.0-dev libgstreamer-plugins-good1.0-dev libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev 
 ```
-
-- gstreamer: For linux (https://gstreamer.freedesktop.org/documentation/installing/on-linux.html)
-```
-apt-get install libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-doc gstreamer1.0-tools
-```
-For other platforms: https://gstreamer.freedesktop.org/documentation/installing/index.html
 
 ## Stream Setup
 Change the config/stream_setup.yaml to suit your required streams.
 
-```
+```yaml
 # Set up your streams to rtsp here.
 streams: # Cannot rename - must leave this as is.
 
@@ -33,16 +28,27 @@ streams: # Cannot rename - must leave this as is.
     bitrate: 800            # bitrate for the h264 encoding.
 
   # Example ROS Image topic stream
-  stream-42:                # Can name this whatever you choose
+  this-is-stream-42:        # Can name this whatever you choose
     type: topic             # topic - Image is sourced from a sensor_msgs::Image topic
     source: /usb_cam0/image_raw  # The ROS topic to subscribe to
     mountpoint: /back      # Choose the mountpoint for the rtsp stream. This will be able to be accessed from rtsp://<server_ip>/back
+    caps: video/x-raw,framerate=10/1,width=640,height=480  # Set the caps to be applied after getting the ROS Image and before the x265 encoder.
     bitrate: 500            # bitrate for the h264 encoding.
 ```
+Notes:
+- Add as many streams as you need. If too much latency is encounted with multiple streams running, the server computer may be maxing out its processor trying to encode all the streams. Try reducing the resolution of the source caps.
+- The ROS Image topic stream may be buggy with framerates too fast for the Image publisher and the buffer writing. Stick with 10/1 fps unless you want to debug? :)
 
 ## Checking the streams
-The best way to check a stream is working is to use gst-launch-1.0 as follows:
-
+### gstreamer
+The best way to check a stream is working is to use `gst-launch-1.0`. You will need to install gstreamer for your client system. See https://gstreamer.freedesktop.org/documentation/installing/index.html
+```bash
+gst-launch-1.0 -v rtspsrc location=rtsp://<server_ip>:8554/<your_stream_mountpoint> drop-on-latency=true use-pipeline-clock=true do-retransmission=false latency=0 protocols=GST_RTSP_LOWER_TRANS_UDP ! rtph264depay ! h264parse ! avdec_h264 ! xvimagesink sync=true
 ```
-gst-launch-1.0 -v rtspsrc location=rtsp://<server_ip>:8554/<your_mount_point> drop-on-latency=true use-pipeline-clock=true do-retransmission=false latency=0 protocols=GST_RTSP_LOWER_TRANS_UDP ! rtph264depay ! h264parse ! avdec_h264 ! xvimagesink sync=true
+If `xvimagesink` isn't available, try replacing with `autovideosink`.
+
+### VLC
+The command I've had the lowest latency with is:
+```bash
+vlc --no-audio --avcodec-hw=any --sout-rtp-proto=udp --network-caching=300 --sout-udp-caching=0 --clock-jitter=0 --rtp-max-misorder=0 rtsp://<server_ip>:8554/<your_stream_mountpoint> :udp-timeout=0
 ```
