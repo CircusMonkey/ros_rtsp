@@ -195,11 +195,11 @@ void Image2RTSPNodelet::url_disconnected(string url) {
 }
 
 void Image2RTSPNodelet::print_info(char *s) {
-	NODELET_INFO(s);
+	NODELET_INFO("%s",s);
 }
 
 void Image2RTSPNodelet::print_error(char *s) {
-	NODELET_ERROR(s);
+	NODELET_ERROR("%s",s);
 }
 
 PLUGINLIB_EXPORT_CLASS(image2rtsp::Image2RTSPNodelet, nodelet::Nodelet)
