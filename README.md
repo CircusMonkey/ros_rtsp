@@ -59,9 +59,8 @@ roslaunch ros_rtsp rtsp_streams.launch
 ### gstreamer
 The best way to check a stream is working is to use `gst-launch-1.0`. You will need to install gstreamer for your client system. See https://gstreamer.freedesktop.org/documentation/installing/index.html
 ```bash
-gst-launch-1.0 -v rtspsrc location=rtsp://<server_ip>:8554/<your_stream_mountpoint> drop-on-latency=true use-pipeline-clock=true do-retransmission=false latency=0 protocols=GST_RTSP_LOWER_TRANS_UDP ! rtph264depay ! h264parse ! avdec_h264 ! xvimagesink sync=true
+gst-launch-1.0 -v rtspsrc location=rtsp://<server_ip>:8554/<your_stream_mountpoint> drop-on-latency=true use-pipeline-clock=true do-retransmission=false latency=0 protocols=GST_RTSP_LOWER_TRANS_UDP ! rtph264depay ! h264parse ! avdec_h264 ! autovideosink sync=true
 ```
-If `xvimagesink` isn't available, try replacing with `autovideosink`.
 
 ### VLC
 The command I've had the lowest latency with is:
