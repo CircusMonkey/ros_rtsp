@@ -1,7 +1,7 @@
 <library path="lib/libimage_to_rtsp_nodelet">
-	<class name="image2rtsp/Image2RTSPNodelet" type="image2rtsp::Image2RTSPNodelet" base_class_type="nodelet::Nodelet">
-		<description>
-			Nodelet to transfert the /camera/image topic from openni2_camera over rtsp. 
-		</description>
-	</class>
+  <class name="image2rtsp/Image2RTSPNodelet" type="image2rtsp::Image2RTSPNodelet" base_class_type="nodelet::Nodelet">
+    <description>
+      Nodelet to transfert the /camera/image topic from openni2_camera over rtsp.
+    </description>
+  </class>
 </library>
