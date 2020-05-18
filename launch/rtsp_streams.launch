@@ -3,9 +3,9 @@
   <!-- Start the RTSP server -->
   <node pkg="nodelet" type="nodelet" name="standalone_nodelet" args="manager" output="screen"/>
 
-	<node pkg="nodelet" type="nodelet" name="Image2RTSPNodelet" args="load image2rtsp/Image2RTSPNodelet standalone_nodelet" output="screen">
+  <node pkg="nodelet" type="nodelet" name="Image2RTSPNodelet" args="load image2rtsp/Image2RTSPNodelet standalone_nodelet" output="screen">
     <!-- Read the stream setup file -->
     <rosparam command="load" file="$(find ros_rtsp)/config/stream_setup.yaml" />
-	</node>
+  </node>
 
 </launch>
