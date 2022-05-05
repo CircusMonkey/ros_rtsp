@@ -30,23 +30,23 @@ catkin_make pkg:=ros_rtsp
 Change the `config/stream_setup.yaml` to suit your required streams.
 
 ```yaml
-# Set up your streams to rtsp here.
-streams: # Cannot rename - must leave this as is.
+# Set up your streams for rtsp here.
+streams:
 
   # Example v4l2 camera stream
-  stream-x:                 # Can name this whatever you choose
-    type: cam               # cam - Will not look in ROS for a image. The video src is set in the 'source' parameter.
-    source: "v4l2src device=/dev/video0 ! videoconvert ! videoscale ! video/x-raw,framerate=15/1,width=1280,height=720"  # Should work with most valid gstreamer piplines (ending with raw video) 
+  stream-1: # Can name this whatever you choose
+    type: cam  # cam - Will not look in ROS for a image. The video src is set in the 'source' parameter.
+    source: "v4l2src device=/dev/video0 ! videoconvert ! videoscale ! video/x-raw,framerate=15/1,width=1280,height=720"  # You can enter any valid gstreamer source and caps here as long as it ends in raw video
     mountpoint: /front      # Choose the mountpoint for the rtsp stream. This will be able to be accessed from rtsp://<server_ip>/front
     bitrate: 800            # bitrate for the h264 encoding.
 
   # Example ROS Image topic stream
-  this-is-stream-42:        # Can name this whatever you choose
-    type: topic             # topic - Image is sourced from a sensor_msgs::Image topic
+  stream2:
+    type: topic  # topic - Image is sourced from a sensor_msgs::Image topic
     source: /usb_cam0/image_raw  # The ROS topic to subscribe to
     mountpoint: /back      # Choose the mountpoint for the rtsp stream. This will be able to be accessed from rtsp://<server_ip>/back
     caps: video/x-raw,framerate=10/1,width=640,height=480  # Set the caps to be applied after getting the ROS Image and before the x265 encoder.
-    bitrate: 500            # bitrate for the h264 encoding.
+    bitrate: 500
 ```
 Add as many streams as you require.
 
@@ -56,17 +56,25 @@ Launch the streams from the ROS launch file:
 roslaunch ros_rtsp rtsp_streams.launch
 ```
 
+In the following examples, replace the `rtsp://127.0.0.1:8554/front` with your servers IP address and mount point `rtsp://YOUR_IP:8554/MOUNT_POINT`.
+
 ### gstreamer
-The best way to check a stream is working is to use `gst-launch-1.0`. You will need to install gstreamer for your client system. See https://gstreamer.freedesktop.org/documentation/installing/index.html
+Use `gst-launch-1.0`. You will need to install gstreamer for your client system. See https://gstreamer.freedesktop.org/documentation/installing/index.html
 ```bash
-gst-launch-1.0 -v rtspsrc location=rtsp://<server_ip>:8554/<your_stream_mountpoint> drop-on-latency=true use-pipeline-clock=true do-retransmission=false latency=0 protocols=GST_RTSP_LOWER_TRANS_UDP ! rtph264depay ! h264parse ! avdec_h264 ! autovideosink sync=true
+gst-launch-1.0 -v rtspsrc location=rtsp://127.0.0.1:8554/front drop-on-latency=true use-pipeline-clock=true do-retransmission=false latency=0 protocols=GST_RTSP_LOWER_TRANS_UDP ! rtph264depay ! h264parse ! avdec_h264 ! autovideosink sync=true
+```
+
+### mpv
+```bash
+mpv --no-cache --untimed --no-demuxer-thread --vd-lavc-threads=1 rtsp://127.0.0.1:8554/front
 ```
 
 ### VLC
-The command I've had the lowest latency with is:
+VLC adds way too much latency. Please don't use it for this purpose. If you want to try, this is the command that was the least slow (Let me know if you find a better command):
 ```bash
-vlc --no-audio --avcodec-hw=any --sout-rtp-proto=udp --network-caching=300 --sout-udp-caching=0 --clock-jitter=0 --rtp-max-misorder=0 rtsp://<server_ip>:8554/<your_stream_mountpoint> :udp-timeout=0
+cvlc --no-audio --mux none --demux none --deinterlace 0 --no-autoscale --avcodec-hw=any --no-auto-preparse --sout-rtp-proto=udp --network-caching=300 --realrtsp-caching=0 --sout-udp-caching=0 --clock-jitter=0 --rtp-max-misorder=0 rtsp://127.0.0.1:8554/front :udp-timeout=0
 ```
+If you wish to use the VLC mobile app to stream on Android or iOS, navigate to the network or streams menu and type in your server URL and mountpoint e.g. `rtsp://127.0.0.1:8554/front`
 
 
 ## Debugging
