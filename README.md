@@ -10,7 +10,7 @@ This is still very much a work in progress. Developing on Ubuntu 16.04 and 18.04
 
 - gstreamer libs:
 ```bash
-sudo apt-get install libgstreamer-plugins-base1.0-dev libgstreamer-plugins-good1.0-dev libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-bad
+sudo apt-get install libgstreamer-plugins-base1.0-dev libgstreamer-plugins-good1.0-dev libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-ugly gstreamer1.0-plugins-bad
 ```
 
 ## Build into your catkin workspace
