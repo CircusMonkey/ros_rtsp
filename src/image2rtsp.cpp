@@ -159,7 +159,7 @@ void Image2RTSPNodelet::url_connected(string url) {
 
             if (num_of_clients[url]==0) {
                 // Subscribe to the ROS topic
-                subs[url] = nh.subscribe<sensor_msgs::Image>(source, 1, boost::bind(&Image2RTSPNodelet::imageCallback, this, _1, url));
+                subs[url] = nh.subscribe<sensor_msgs::Image>(source, 1, boost::bind(&Image2RTSPNodelet::imageCallback, this, boost::placeholders::_1, url));
             }
             num_of_clients[url]++;
         }
